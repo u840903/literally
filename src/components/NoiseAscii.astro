@@ -1,0 +1,111 @@
+---
+// No frontmatter is needed unless you plan to pass props or add additional logic.
+---
+
+<span id="char" class="invisible absolute whitespace-pre leading-none">M</span>
+<div id="container" class="whitespace-pre w-full h-full overflow-hidden cursor-pointer leading-none"></div>
+
+<script client:load>
+    (function () {
+        const container = document.getElementById('container');
+        const char = document.getElementById('char');
+        const startTime = performance.now() - 266000;
+
+        const config = {
+            waveSpeed: 0.01618,
+            waveFrequency: 0.15,
+            waveAmplitude: 10,
+            noiseScale: 10,
+            rippleDecay: 5,
+            rippleAmplitude: 3,
+            gradient: " .:-=+*#%@",
+            fps: 60,
+        };
+
+        let dimensions = {cols: 128, rows: 64};
+        let ripples = [];
+
+        function randomNoise(x, y, t) {
+            return (
+                Math.sin(x * 0.1 + y * 0.1 + t * 0.3) *
+                Math.cos(x * 0.07 - y * 0.13 + t * 0.2)
+            );
+        }
+
+        function recalculateDimensions() {
+            const charBounds = char.getBoundingClientRect();
+            const charWidth = charBounds.width || 7;
+            const charHeight = charBounds.height || 14;
+            const containerBounds = container.getBoundingClientRect();
+            const containerWidth = containerBounds.width || window.innerWidth;
+            const containerHeight = containerBounds.height || window.innerHeight;
+
+            const cols = Math.floor(containerWidth / charWidth);
+            const rows = Math.floor(containerHeight / charHeight);
+
+            if (dimensions.cols !== cols || dimensions.rows !== rows) {
+                dimensions = {cols, rows};
+            }
+        }
+
+        function handleClick(event) {
+            const bounds = container.getBoundingClientRect();
+            const x = Math.floor((event.clientX - bounds.left) / (bounds.width / dimensions.cols));
+            const y = Math.floor((event.clientY - bounds.top) / (bounds.height / dimensions.rows));
+
+            ripples.push({x, y, start: performance.now()});
+        }
+
+        function renderFrame() {
+            const elapsedTime = (performance.now() - startTime) / 1000;
+            const {cols, rows} = dimensions;
+            const output = [];
+            const {
+                waveSpeed,
+                waveFrequency,
+                waveAmplitude,
+                noiseScale,
+                rippleDecay,
+                rippleAmplitude,
+                gradient,
+            } = config;
+
+            const gradientLength = gradient.length;
+
+            for (let y = 0; y < rows; y++) {
+                let row = "";
+                for (let x = 0; x < cols; x++) {
+                    const baseWave = Math.sin(x * waveFrequency + elapsedTime * waveSpeed) * waveAmplitude;
+                    const noise = randomNoise(x, y, elapsedTime) * noiseScale;
+
+                    const rippleEffect = ripples.reduce((acc, ripple) => {
+                        const distance = Math.sqrt((x - ripple.x) ** 2 + (y - ripple.y) ** 2);
+                        const rippleTime = (performance.now() - ripple.start) / 1000;
+                        const decay = Math.max(0, rippleAmplitude - rippleTime * rippleDecay);
+                        return acc + Math.sin(distance - rippleTime * 10) * decay;
+                    }, 0);
+
+                    const wave = baseWave + noise + rippleEffect;
+                    const charIndex = Math.floor(Math.abs(wave) % gradientLength);
+                    row += gradient[charIndex];
+                }
+                output.push(row);
+            }
+
+            container.textContent = output.join("\n");
+
+            // Remove expired ripples
+            ripples = ripples.filter(
+                (ripple) => (performance.now() - ripple.start) / 1000 < config.rippleAmplitude / config.rippleDecay
+            );
+
+            setTimeout(() => requestAnimationFrame(renderFrame), 1000 / config.fps);
+        }
+
+        window.addEventListener('resize', recalculateDimensions);
+        container.addEventListener('click', handleClick);
+
+        recalculateDimensions();
+        renderFrame();
+    })();
+</script>
