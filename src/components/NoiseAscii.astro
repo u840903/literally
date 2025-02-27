@@ -2,13 +2,13 @@
 // No frontmatter is needed unless you plan to pass props or add additional logic.
 ---
 
-<span id="char" class="invisible absolute whitespace-pre leading-none">M</span>
-<div id="container" class="whitespace-pre w-full h-full overflow-hidden cursor-pointer leading-none"></div>
+<span id="char-noise" class="invisible absolute whitespace-pre leading-none">M</span>
+<div id="container-noise" class="whitespace-pre w-full h-full overflow-hidden cursor-pointer leading-none"></div>
 
 <script client:load>
     (function () {
-        const container = document.getElementById('container');
-        const char = document.getElementById('char');
+        const container = document.getElementById('container-noise');
+        const char = document.getElementById('char-noise');
         const startTime = performance.now() - 266000;
 
         const config = {

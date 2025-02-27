@@ -1,0 +1,164 @@
+<span id="char" class="invisible absolute whitespace-pre leading-none">M</span>
+<div id="container" class="whitespace-pre w-full h-full overflow-hidden cursor-pointer leading-none"></div>
+
+<script client:load>
+    (function() {
+        // A simple pseudo-random function for per-line variation.
+        function pseudoRandom(seed) {
+            return (Math.sin(seed) * 43758.5453123) % 1;
+        }
+
+        // A smooth tent function using cosine interpolation.
+        // pos: current position (in pixels) within the effective width.
+        // peak: desired peak position (in pixels).
+        // effectiveWidth: total width (in pixels) of the drawing region.
+        // This function returns 0 at pos=0 and effectiveWidth, and smoothly rises to 1 at pos=peak.
+        function smoothTent(pos, peak, effectiveWidth) {
+            if (pos < peak) {
+                // Left half: goes from 0 at pos=0 to 1 at pos=peak.
+                return 0.5 - 0.5 * Math.cos(Math.PI * pos / peak);
+            } else {
+                // Right half: goes from 1 at pos=peak back to 0 at pos=effectiveWidth.
+                return 0.5 - 0.5 * Math.cos(Math.PI * (effectiveWidth - pos) / (effectiveWidth - peak));
+            }
+        }
+
+        const container = document.getElementById('container');
+        const char = document.getElementById('char');
+        const startTime = performance.now();
+        let dimensions = { cols: 128, rows: 64 };
+
+        // Configuration for the moving lines ("mountains").
+        const config = {
+            movingLines: {
+                verticalSpeed: 5,         // Rows per second.
+                baselineSpacing: 10,      // Spacing between consecutive lines.
+                baseThickness: 3,         // Minimum half‑thickness at edges.
+                extraThickness: 5.0,      // Extra thickness at center.
+                amplitude: -2,            // Base hump height.
+                amplitude2: 0,            // Time‐dependent oscillation.
+                jaggedAmplitude: -1.0,    // Base jagged strength.
+                jaggedFrequency: 0.2,      // Frequency of jaggedness.
+                fps: 30,                  // Frames per second.
+                gradient: "@%#*+=-:. ",   // Intensity mapping.
+                // Horizontal drawing range (fractions of total width)
+                middleRangeStart: 0.1,
+                middleRangeEnd: 0.9
+            }
+        };
+
+        // Define a vertical margin (in rows) so that lines are created off-screen.
+        const verticalMargin = 5;
+
+        // Recalculate grid dimensions based on container size.
+        function recalculateDimensions() {
+            const charBounds = char.getBoundingClientRect();
+            const charWidth = charBounds.width || 7;
+            const charHeight = charBounds.height || 14;
+            const containerBounds = container.getBoundingClientRect();
+            const containerWidth = containerBounds.width || window.innerWidth;
+            const containerHeight = containerBounds.height || window.innerHeight;
+            const cols = Math.floor(containerWidth / charWidth);
+            const rows = Math.floor(containerHeight / charHeight);
+            if (dimensions.cols !== cols || dimensions.rows !== rows) {
+                dimensions = { cols, rows };
+            }
+        }
+
+        // Render one frame of the moving lines animation.
+        // We compute a dynamic range of baseline indices so that:
+        //    rawDepth = baseline + verticalSpeed * elapsedTime
+        // spans from below the top margin to above the bottom margin.
+        // For each line, we use a smooth horizontal multiplier that starts at 0 at the left (middleRangeStart)
+        // and curves up to a randomly shifted peak (now between 40% and 70% of the effective width).
+        function renderMovingLinesFrame(elapsedTime) {
+            const { cols, rows } = dimensions;
+            const output = [];
+            const { verticalSpeed, baselineSpacing, baseThickness, extraThickness,
+                amplitude, amplitude2, jaggedAmplitude, jaggedFrequency, gradient,
+                middleRangeStart, middleRangeEnd } = config.movingLines;
+            const gradLen = gradient.length;
+
+            // Compute the range of baseline indices.
+            const minIndex = Math.floor((-verticalMargin - verticalSpeed * elapsedTime) / baselineSpacing);
+            const maxIndex = Math.ceil((rows + verticalMargin - verticalSpeed * elapsedTime) / baselineSpacing);
+
+            // Precompute horizontal drawing range.
+            const rangeStartPx = cols * middleRangeStart;
+            const rangeEndPx = cols * middleRangeEnd;
+            const effectiveWidth = rangeEndPx - rangeStartPx;
+
+            // Loop over each visible row.
+            for (let y = 0; y < rows; y++) {
+                let rowStr = "";
+                // Loop over each column.
+                for (let x = 0; x < cols; x++) {
+                    let chosenIntensity = 0;
+                    let chosenDepth = -Infinity;
+
+                    // For each line (baseline index) that might affect this pixel.
+                    for (let i = minIndex; i <= maxIndex; i++) {
+                        const baseline = i * baselineSpacing;
+                        const rawDepth = baseline + verticalSpeed * elapsedTime;
+                        const effectiveBaseline = rawDepth;
+
+                        // Generate per-line random factors.
+                        const randomAmplitudeFactor = 0.8 + 0.4 * pseudoRandom(baseline);
+                        const randomJaggedAmplitudeFactor = 0.8 + 0.4 * pseudoRandom(baseline + 1);
+                        const jaggedPhaseShift = 2 * Math.PI * pseudoRandom(baseline + 2);
+                        const randomThresholdFactor = 0.9 + 0.2 * pseudoRandom(baseline + 3);
+
+                        // Compute a per-line horizontal multiplier if x is within the middle range.
+                        let thisLineMultiplier = 0;
+                        if (x >= rangeStartPx && x <= rangeEndPx) {
+                            const pos = x - rangeStartPx;
+                            // Choose a random peak position for this line between 40% and 70% of effectiveWidth.
+                            const peakX = effectiveWidth * (0.4 + 0.3 * pseudoRandom(baseline + 100));
+                            thisLineMultiplier = smoothTent(pos, peakX, effectiveWidth);
+                        }
+
+                        // Perturb parameters for this line.
+                        const perturbedAmplitude = amplitude * randomAmplitudeFactor;
+                        const perturbedJaggedAmplitude = jaggedAmplitude * randomJaggedAmplitudeFactor;
+                        const effectiveThreshold = (baseThickness + extraThickness * thisLineMultiplier) * randomThresholdFactor;
+
+                        // Compute the vertical offset: smooth hump plus high-frequency jagged term.
+                        const smoothOffset = (perturbedAmplitude + amplitude2 * Math.sin(elapsedTime + baseline)) * thisLineMultiplier;
+                        const jaggedOffset = perturbedJaggedAmplitude * Math.sin(x * jaggedFrequency + elapsedTime * 2 + jaggedPhaseShift) * thisLineMultiplier;
+                        const offset = smoothOffset + jaggedOffset;
+
+                        // Final vertical position of this line at column x.
+                        const lineY = effectiveBaseline + offset;
+                        const depthValue = rawDepth; // Use rawDepth for occlusion.
+                        const distance = Math.abs(y - lineY);
+
+                        if (distance < effectiveThreshold) {
+                            const localIntensity = 1 - (distance / effectiveThreshold);
+                            if (depthValue > chosenDepth) {
+                                chosenDepth = depthValue;
+                                chosenIntensity = localIntensity;
+                            }
+                        }
+                    }
+                    // Map the chosen intensity (0–1) to a character from the gradient.
+                    const charIndex = Math.floor(chosenIntensity * (gradLen - 1));
+                    rowStr += gradient[charIndex];
+                }
+                output.push(rowStr);
+            }
+            return output.join("\n");
+        }
+
+        function renderFrame() {
+            recalculateDimensions();
+            const elapsedTime = (performance.now() - startTime) / 1000;
+            const frameText = renderMovingLinesFrame(elapsedTime);
+            container.textContent = frameText;
+            setTimeout(() => requestAnimationFrame(renderFrame), 1000 / config.movingLines.fps);
+        }
+
+        window.addEventListener('resize', recalculateDimensions);
+        recalculateDimensions();
+        renderFrame();
+    })();
+</script>

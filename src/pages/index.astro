@@ -1,10 +1,14 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import NoiseAscii from "../components/NoiseAscii.astro";
+import Pulsar from "../components/Pulsar.astro";
 ---
 
 <Layout>
-    <div class="aspect-square sm:aspect-video w-full">
+    <div class="aspect-square sm:aspect-video w-full pb-4">
+        <Pulsar/>
+    </div>
+    <div class="aspect-square sm:aspect-video w-full pb-4">
         <NoiseAscii/>
     </div>
 </Layout>
