@@ -1,0 +1,135 @@
+---
+
+---
+
+<span id="char-unknownPleasures" class="invisible absolute whitespace-pre leading-none">M</span>
+<div id="container-unknownPleasures" class="whitespace-pre w-full h-full overflow-hidden cursor-pointer leading-none"></div>
+
+<script>
+
+    import {type Dimensions, recalculateDimensions} from "../helpers/recalculateDimensions/recalculateDimensions";
+    import {scheduleFrame} from "../helpers/scheduleFrame/scheduleFrame";
+    import {addSignatureToOutput} from "../helpers/addSignatureToOutput/addSignatureToOutput";
+
+    function startMovingLinesAnimation(container: HTMLElement, char: HTMLElement): void {
+        let dimensions: Dimensions = recalculateDimensions(container, char);
+        const startTime: number = performance.now();
+        const config = {
+            verticalSpeed: 5,          // Rows per second.
+            baselineSpacing: 10,       // Spacing between consecutive lines.
+            baseThickness: 3,          // Minimum half‑thickness at edges.
+            extraThickness: 5.0,       // Extra thickness at center.
+            amplitude: -2,             // Base hump height.
+            amplitude2: 0,             // Time‑dependent oscillation.
+            jaggedAmplitude: -1.0,     // Base jagged strength.
+            jaggedFrequency: 0.2,      // Frequency of jaggedness.
+            fps: 60,
+            gradient: "@%#*+=-:. ",
+            middleRangeStart: 0.1,
+            middleRangeEnd: 0.9
+        };
+        const verticalMargin: number = 5;
+
+        function pseudoRandom(seed: number): number {
+            return (Math.sin(seed) * 43758.5453123) % 1;
+        }
+
+        function smoothTent(pos: number, peak: number, effectiveWidth: number): number {
+            if (pos < peak) {
+                return 0.5 - 0.5 * Math.cos(Math.PI * pos / peak);
+            } else {
+                return 0.5 - 0.5 * Math.cos(Math.PI * (effectiveWidth - pos) / (effectiveWidth - peak));
+            }
+        }
+
+        function renderMovingLinesFrame(elapsedTime: number): string {
+            const {cols, rows} = dimensions;
+            const output: string[] = [];
+            const {
+                verticalSpeed,
+                baselineSpacing,
+                baseThickness,
+                extraThickness,
+                amplitude,
+                amplitude2,
+                jaggedAmplitude,
+                jaggedFrequency,
+                gradient,
+                middleRangeStart,
+                middleRangeEnd
+            } = config;
+            const gradLen: number = gradient.length;
+
+            // Compute the range of baseline indices.
+            const minIndex: number = Math.floor((-verticalMargin - verticalSpeed * elapsedTime) / baselineSpacing);
+            const maxIndex: number = Math.ceil((rows + verticalMargin - verticalSpeed * elapsedTime) / baselineSpacing);
+            const rangeStartPx: number = cols * middleRangeStart;
+            const rangeEndPx: number = cols * middleRangeEnd;
+            const effectiveWidth: number = rangeEndPx - rangeStartPx;
+
+            for (let y = 0; y < rows; y++) {
+                let rowStr = "";
+                for (let x = 0; x < cols; x++) {
+                    let chosenIntensity = 0;
+                    let chosenDepth = -Infinity;
+
+                    for (let i = minIndex; i <= maxIndex; i++) {
+                        const baseline = i * baselineSpacing;
+                        const rawDepth = baseline + verticalSpeed * elapsedTime;
+                        const randomAmplitudeFactor = 0.8 + 0.4 * pseudoRandom(baseline);
+                        const randomJaggedAmplitudeFactor = 0.8 + 0.4 * pseudoRandom(baseline + 1);
+                        const jaggedPhaseShift = 2 * Math.PI * pseudoRandom(baseline + 2);
+                        const randomThresholdFactor = 0.9 + 0.2 * pseudoRandom(baseline + 3);
+
+                        let thisLineMultiplier = 0;
+                        if (x >= rangeStartPx && x <= rangeEndPx) {
+                            const pos = x - rangeStartPx;
+                            const peakX = effectiveWidth * (0.4 + 0.3 * pseudoRandom(baseline + 100));
+                            thisLineMultiplier = smoothTent(pos, peakX, effectiveWidth);
+                        }
+
+                        const perturbedAmplitude = amplitude * randomAmplitudeFactor;
+                        const perturbedJaggedAmplitude = jaggedAmplitude * randomJaggedAmplitudeFactor;
+                        const effectiveThreshold = (baseThickness + extraThickness * thisLineMultiplier) * randomThresholdFactor;
+                        const smoothOffset = (perturbedAmplitude + amplitude2 * Math.sin(elapsedTime + baseline)) * thisLineMultiplier;
+                        const jaggedOffset = perturbedJaggedAmplitude *
+                            Math.sin(x * jaggedFrequency + elapsedTime * 2 + jaggedPhaseShift) * thisLineMultiplier;
+                        const offset = smoothOffset + jaggedOffset;
+                        const lineY = baseline + verticalSpeed * elapsedTime + offset;
+                        const depthValue = baseline + verticalSpeed * elapsedTime;
+                        const distance = Math.abs(y - lineY);
+
+                        if (distance < effectiveThreshold && depthValue > chosenDepth) {
+                            chosenDepth = depthValue;
+                            chosenIntensity = 1 - (distance / effectiveThreshold);
+                        }
+                    }
+                    const charIndex = Math.floor(chosenIntensity * (gradLen - 1));
+                    rowStr += gradient[charIndex];
+                }
+                output.push(rowStr);
+            }
+            addSignatureToOutput(output, "Unknown Pleasures");
+
+            return output.join("\n");
+        }
+
+        function renderFrame(): void {
+            dimensions = recalculateDimensions(container, char);
+            const elapsedTime: number = (performance.now() - startTime) / 1000;
+            container.textContent = renderMovingLinesFrame(elapsedTime);
+            scheduleFrame(renderFrame);
+        }
+
+        window.addEventListener('resize', () => {
+            dimensions = recalculateDimensions(container, char);
+        });
+        renderFrame();
+    }
+
+
+    const linesContainer = document.getElementById('container-unknownPleasures') as HTMLElement;
+    const linesChar = document.getElementById('char-unknownPleasures') as HTMLElement;
+
+    startMovingLinesAnimation(linesContainer, linesChar);
+</script>

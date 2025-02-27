@@ -1,0 +1,146 @@
+<span id="char-pollock" class="invisible absolute whitespace-pre leading-none">M</span>
+<div id="container-pollock" class="whitespace-pre w-full h-full overflow-hidden cursor-pointer leading-none"></div>
+
+<script>
+    import { type Dimensions, recalculateDimensions } from "../helpers/recalculateDimensions/recalculateDimensions";
+    import { scheduleFrame } from "../helpers/scheduleFrame/scheduleFrame";
+    import {addSignatureToOutput} from "../helpers/addSignatureToOutput/addSignatureToOutput";
+
+    // Represents a moving drop with a trail.
+    interface Drop {
+        x: number;       // floating‑point x position (in cells)
+        y: number;       // floating‑point y position (in cells)
+        vx: number;      // velocity in x (cells per second)
+        vy: number;      // velocity in y (cells per second)
+        trail: { x: number; y: number }[]; // history of cell positions (oldest first)
+    }
+
+    function startpollockAnimation(container: HTMLElement, char: HTMLElement): void {
+        let dimensions: Dimensions = recalculateDimensions(container, char);
+
+        // Extended gradient (from dim to bright)
+        const gradient = " .:-=+*#%@&M8B";
+        const config = {
+            trailLength: 100,    // Number of positions kept in the trail.
+            baseSpeed: 5,        // Base speed factor (cells per second).
+            numDrops: 300,       // How many diagonal drops.
+            gradient,            // Extended gradient string.
+        };
+
+        let drops: Drop[] = [];
+
+        function initializeDrops(): void {
+            dimensions = recalculateDimensions(container, char);
+            drops = [];
+            for (let i = 0; i < config.numDrops; i++) {
+                // Start at a random position on the grid.
+                const initialX = Math.random() * dimensions.cols;
+                const initialY = Math.random() * dimensions.rows;
+                // Choose a random direction.
+                const angle = Math.random() * 2 * Math.PI;
+                // Vary speed per drop (from 0.5x to 1.5x baseSpeed).
+                const speed = config.baseSpeed * (0.5 + Math.random());
+                const vx = Math.cos(angle) * speed;
+                const vy = Math.sin(angle) * speed;
+                drops.push({
+                    x: initialX,
+                    y: initialY,
+                    vx,
+                    vy,
+                    trail: [{ x: Math.floor(initialX), y: Math.floor(initialY) }],
+                });
+            }
+        }
+        initializeDrops();
+
+        let lastFrameTime = performance.now();
+
+        function renderFrame(): void {
+            const currentTime = performance.now();
+            const dt = (currentTime - lastFrameTime) / 1000; // delta time in seconds
+            lastFrameTime = currentTime;
+
+            // Create a grid to store brightness values (0 = background, 1 = brightest)
+            const brightnessGrid: number[][] = [];
+            for (let row = 0; row < dimensions.rows; row++) {
+                brightnessGrid[row] = new Array(dimensions.cols).fill(0);
+            }
+
+            // Update each drop.
+            for (const drop of drops) {
+                // Update position.
+                drop.x += drop.vx * dt;
+                drop.y += drop.vy * dt;
+
+                // Bounce off the borders.
+                if (drop.x < 0) {
+                    drop.x = 0;
+                    drop.vx = -drop.vx;
+                }
+                if (drop.x >= dimensions.cols - 1) {
+                    drop.x = dimensions.cols - 1;
+                    drop.vx = -drop.vx;
+                }
+                if (drop.y < 0) {
+                    drop.y = 0;
+                    drop.vy = -drop.vy;
+                }
+                if (drop.y >= dimensions.rows - 1) {
+                    drop.y = dimensions.rows - 1;
+                    drop.vy = -drop.vy;
+                }
+
+                // Determine the current cell.
+                const cellX = Math.floor(drop.x);
+                const cellY = Math.floor(drop.y);
+                drop.trail.push({ x: cellX, y: cellY });
+                if (drop.trail.length > config.trailLength) {
+                    drop.trail.shift();
+                }
+
+                // For each position in the drop's trail, assign brightness based on recency.
+                const L = drop.trail.length;
+                for (let i = 0; i < L; i++) {
+                    const brightness = (i + 1) / L; // scales linearly from ~0 to 1.
+                    const pos = drop.trail[i];
+                    if (
+                        pos.y >= 0 && pos.y < dimensions.rows &&
+                        pos.x >= 0 && pos.x < dimensions.cols
+                    ) {
+                        brightnessGrid[pos.y][pos.x] = Math.max(brightnessGrid[pos.y][pos.x], brightness);
+                    }
+                }
+            }
+
+            // Build the output from the brightness grid.
+            const output: string[] = [];
+            for (let row = 0; row < dimensions.rows; row++) {
+                let rowStr = "";
+                for (let col = 0; col < dimensions.cols; col++) {
+                    const b = brightnessGrid[row][col];
+                    // Map brightness [0,1] to an index in the gradient.
+                    const index = Math.floor(b * (config.gradient.length - 1));
+                    rowStr += config.gradient.charAt(index);
+                }
+                output.push(rowStr);
+            }
+
+            addSignatureToOutput(output, "Pollock");
+
+            container.textContent = output.join("\n");
+
+            scheduleFrame(renderFrame);
+        }
+
+        window.addEventListener("resize", () => {
+            dimensions = recalculateDimensions(container, char);
+            initializeDrops();
+        });
+
+        renderFrame();
+    }
+
+    const pollockContainer = document.getElementById("container-pollock") as HTMLElement;
+    const pollockChar = document.getElementById("char-pollock") as HTMLElement;
+    startpollockAnimation(pollockContainer, pollockChar);
+</script>

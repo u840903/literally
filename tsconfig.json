@@ -8,6 +8,17 @@
     "dist"
   ],
   "compilerOptions": {
-    "baseUrl": "."
+    "baseUrl": ".",
+    "verbatimModuleSyntax": true,
+    "paths": {
+      "@components/*": ["src/components/*"],
+      "@layouts/*": ["src/layouts/*"],
+      "@helpers/*": ["src/helpers/*"]
+    },
+    "plugins": [
+      {
+        "name": "@astrojs/ts-plugin"
+      },
+    ]
   }
 }

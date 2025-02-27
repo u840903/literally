@@ -6,6 +6,8 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
     adapter: vercel(),
     vite: {
-        plugins: [tailwindcss()]
+        plugins: [
+            tailwindcss(),
+        ]
     }
 });

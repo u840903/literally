@@ -1,14 +1,18 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import NoiseAscii from "../components/NoiseAscii.astro";
-import Pulsar from "../components/Pulsar.astro";
+import Trypophobia from "../components/Trypophobia.astro";
+import UnknownPleasures from "../components/UnknownPleasures.astro";
+import Pollock from '@components/Pollock.astro';
 ---
 
 <Layout>
-    <div class="aspect-square sm:aspect-video w-full pb-4">
-        <Pulsar/>
+    <div class="aspect-square sm:aspect-video w-full pb-8">
+        <UnknownPleasures/>
     </div>
-    <div class="aspect-square sm:aspect-video w-full pb-4">
-        <NoiseAscii/>
+    <div class="aspect-square sm:aspect-video w-full pb-8">
+        <Trypophobia/>
+    </div>
+    <div class="aspect-square sm:aspect-video w-full pb-8">
+        <Pollock/>
     </div>
 </Layout>
