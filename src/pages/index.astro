@@ -3,9 +3,13 @@ import Layout from '../layouts/Layout.astro';
 import Trypophobia from "../components/Trypophobia.astro";
 import UnknownPleasures from "../components/UnknownPleasures.astro";
 import Pollock from '@components/Pollock.astro';
+import Mandelbrot from "../components/Mandelbrot.astro";
 ---
 
 <Layout>
+    <div class="aspect-square sm:aspect-video w-full pb-8">
+        <Mandelbrot/>
+    </div>
     <div class="aspect-square sm:aspect-video w-full pb-8">
         <UnknownPleasures/>
     </div>

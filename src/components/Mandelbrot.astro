@@ -1,0 +1,158 @@
+<span id="char-mandelbrot" class="invisible absolute whitespace-pre leading-none">M</span>
+<div id="container-mandelbrot" class="whitespace-pre w-full h-full overflow-hidden cursor-pointer leading-none"></div>
+
+<script>
+    import { type Dimensions, recalculateDimensions } from "../helpers/recalculateDimensions/recalculateDimensions";
+    import { scheduleFrame } from "../helpers/scheduleFrame/scheduleFrame";
+    import { addSignatureToOutput } from "../helpers/addSignatureToOutput/addSignatureToOutput";
+
+    // Basic configuration – note that center is initially set to a known edge.
+    function getResponsiveConfig({ cols, rows }: Dimensions) {
+        return {
+            maxIterations: 200,                   // Maximum iterations for Mandelbrot test.
+            gradient: " .'`^\",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$",
+            initialScale: 3 / cols,                // Initial scale based on canvas width.
+            zoomRate: 0.5,                         // Zoom speed factor (exponential zoom).
+            centerX: -0.743643887037151,           // Starting center on an edge.
+            centerY: 0.13182590420533
+        };
+    }
+
+    // Enhanced edge detection: Search a larger grid around the current center and select
+    // the candidate point (that escapes) with the highest iteration count.
+    function adjustCenter(currentX, currentY, scale, config) {
+        const { maxIterations } = config;
+        let bestX = currentX, bestY = currentY;
+        let bestN = -1;  // highest iteration count among candidates that eventually escape.
+        const steps = 11;               // Number of steps in each direction (grid size).
+        const delta = scale * 20;       // Search radius in complex coordinates.
+        for (let i = -Math.floor(steps / 2); i <= Math.floor(steps / 2); i++) {
+            for (let j = -Math.floor(steps / 2); j <= Math.floor(steps / 2); j++) {
+                const a = currentX + (i / steps) * delta;
+                const b = currentY + (j / steps) * delta;
+                let n = 0, z_a = 0, z_b = 0;
+                while (n < maxIterations) {
+                    let aa = z_a * z_a - z_b * z_b;
+                    let bb = 2 * z_a * z_b;
+                    z_a = aa + a;
+                    z_b = bb + b;
+                    if (z_a * z_a + z_b * z_b > 4) break;
+                    n++;
+                }
+                // We only consider candidates that escape (n < maxIterations)
+                // and choose the one with the highest iteration count.
+                if (n < maxIterations && n > bestN) {
+                    bestN = n;
+                    bestX = a;
+                    bestY = b;
+                }
+            }
+        }
+        // If we found at least one candidate that escapes, return it; otherwise, fallback.
+        return bestN > -1 ? { centerX: bestX, centerY: bestY } : { centerX: currentX, centerY: currentY };
+    }
+
+    // Render one frame of the Mandelbrot zoom using the (possibly adjusted) center.
+    function rendermandelbrotZoomFrame(elapsedTime, config, dimensions, center, currentZoom) {
+        const { cols, rows } = dimensions;
+        const output = [];
+        const { maxIterations, gradient, initialScale } = config;
+        const gradLen = gradient.length;
+
+        // currentZoom is passed in (which might be an interpolated value during reset)
+        const scale = initialScale / currentZoom;
+
+        for (let y = 0; y < rows; y++) {
+            let rowStr = "";
+            for (let x = 0; x < cols; x++) {
+                // Map the pixel to a point in the complex plane using the current center.
+                const a = center.x + (x - cols / 2) * scale;
+                const b = center.y + (y - rows / 2) * scale;
+
+                let n = 0, z_a = 0, z_b = 0;
+                while (n < maxIterations) {
+                    let aa = z_a * z_a - z_b * z_b;
+                    let bb = 2 * z_a * z_b;
+                    z_a = aa + a;
+                    z_b = bb + b;
+                    if (z_a * z_a + z_b * z_b > 4) break;
+                    n++;
+                }
+                // Wrap the gradient index using modulus.
+                const charIndex = Math.floor((n / maxIterations) * gradLen) % gradLen;
+                rowStr += gradient[charIndex];
+            }
+            output.push(rowStr);
+        }
+        addSignatureToOutput(output, "Mandelbrot");
+        return output.join("\n");
+    }
+
+    // Get references to the container and character element.
+    const container = document.getElementById('container-mandelbrot');
+    const char = document.getElementById('char-mandelbrot');
+
+    let dimensions = recalculateDimensions(container, char);
+    const initialConfig = getResponsiveConfig(dimensions);
+    // Initialize autoCenter with the starting center from the config.
+    let autoCenter = { x: initialConfig.centerX, y: initialConfig.centerY };
+    let startTime = performance.now();
+
+    // Reset control variables.
+    let isResetting = false;
+    let resetStartTime = 0;
+    let resetDuration = 1; // seconds over which the zoom-out happens
+    let resetInitialZoom = 1;
+    const maxZoomThreshold = 1e5;  // Threshold zoom factor at which we trigger reset
+
+    // Main render loop.
+    function renderFrame() {
+        dimensions = recalculateDimensions(container, char);
+        const config = getResponsiveConfig(dimensions);
+        const now = performance.now();
+        let elapsedTime = (now - startTime) / 1000;
+        let zoom = Math.exp(elapsedTime * config.zoomRate);
+
+        // If not resetting and zoom exceeds the threshold, begin reset.
+        if (!isResetting && zoom > maxZoomThreshold) {
+            isResetting = true;
+            resetStartTime = now;
+            resetInitialZoom = zoom;
+        }
+
+        // If in resetting mode, quickly interpolate zoom back to 1.
+        if (isResetting) {
+            const resetElapsed = (now - resetStartTime) / 1000;
+            const progress = Math.min(resetElapsed / resetDuration, 1);
+            // Linear interpolation from current deep zoom (resetInitialZoom) to 1.
+            zoom = resetInitialZoom * (1 - progress)
+            // When finished, restart the dive.
+            if (progress >= 1) {
+                isResetting = false;
+                startTime = performance.now();
+                autoCenter = { x: initialConfig.centerX, y: initialConfig.centerY };
+                zoom = 1;
+                elapsedTime = 0;
+            }
+        }
+
+        const scale = config.initialScale / zoom;
+
+        // Adjust the center to better "lock onto" the Mandelbrot edge.
+        const candidate = adjustCenter(autoCenter.x, autoCenter.y, scale, config);
+        // Smoothly update autoCenter using linear interpolation.
+        const lerpFactor = 0.01;
+        autoCenter.x = autoCenter.x * (1 - lerpFactor) + candidate.centerX * lerpFactor;
+        autoCenter.y = autoCenter.y * (1 - lerpFactor) + candidate.centerY * lerpFactor;
+
+        container.textContent = rendermandelbrotZoomFrame(elapsedTime, config, dimensions, autoCenter, zoom);
+        scheduleFrame(renderFrame);
+    }
+
+    // Update dimensions when the window is resized.
+    window.addEventListener('resize', () => {
+        dimensions = recalculateDimensions(container, char);
+    });
+
+    renderFrame();
+</script>
